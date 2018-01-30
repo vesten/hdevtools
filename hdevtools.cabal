@@ -73,8 +73,12 @@ executable hdevtools
                        network,
                        process,
                        time,
-                       transformers,
-                       unix
+                       transformers
+
+  if os(windows)
+    build-depends:     unix-compat
+  else
+    build-depends:     unix
 
   if impl(ghc == 7.6.*)
     build-depends:     Cabal >= 1.16

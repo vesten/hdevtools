@@ -1,24 +1,37 @@
+{-# LANGUAGE CPP #-}
+
 module Client
     ( getServerStatus
     , stopServer
     , serverCommand
     ) where
 
-import Control.Exception (tryJust)
-import Control.Monad (guard)
-import Network (PortID(UnixSocket), connectTo)
-import System.Exit (exitFailure, exitWith)
-import System.IO (Handle, hClose, hFlush, hGetLine, hPutStrLn, stderr)
-import System.IO.Error (isDoesNotExistError)
+import           Control.Exception (tryJust)
+import           Control.Monad     (guard)
+import           Network           (connectTo)
+#ifdef mingw32_HOST_OS
+import           Network           (PortID (PortNumber))
+#else
+import           Network           (PortID (UnixSocket))
+#endif
 
-import Daemonize (daemonize)
-import Server (createListenSocket, startServer)
-import Types (ClientDirective(..), Command(..), CommandExtra(..), ServerDirective(..))
-import Util (readMaybe)
+import           System.Exit       (exitFailure, exitWith)
+import           System.IO         (Handle, hClose, hFlush, hGetLine, hPutStrLn,
+                                    stderr)
+import           System.IO.Error   (isDoesNotExistError)
+
+import           Daemonize         (daemonize)
+import           Server            (createListenSocket, startServer)
+import           Types             (ClientDirective (..), Command (..),
+                                    CommandExtra (..), ServerDirective (..))
+import           Util              (readMaybe)
 
 connect :: FilePath -> IO Handle
-connect sock = do
-  connectTo "" (UnixSocket sock)
+#ifdef mingw32_HOST_OS
+connect sock = connectTo "" (PortNumber $ fromIntegral $ sock)
+#else
+connect sock = connectTo "" (UnixSocket sock)
+#endif
 
 getServerStatus :: FilePath -> IO ()
 getServerStatus sock = do

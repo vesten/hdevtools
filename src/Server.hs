@@ -1,20 +1,39 @@
+{-# LANGUAGE CPP #-}
+
 module Server where
 
-import Control.Exception (bracket, finally, handleJust, tryJust)
-import Control.Monad (guard)
-import Data.IORef (IORef, newIORef, readIORef, writeIORef)
-import GHC.IO.Exception (IOErrorType(ResourceVanished))
-import Network (PortID(UnixSocket), Socket, accept, listenOn, sClose)
-import System.Directory (removeFile)
-import System.Exit (ExitCode(ExitSuccess))
-import System.IO (Handle, hClose, hFlush, hGetLine, hPutStrLn)
-import System.IO.Error (ioeGetErrorType, isAlreadyInUseError, isDoesNotExistError)
+import           Control.Exception (bracket, finally, handleJust, tryJust)
+import           Control.Monad     (guard)
+import           Data.IORef        (IORef, newIORef, readIORef, writeIORef)
+import           GHC.IO.Exception  (IOErrorType (ResourceVanished))
+import           Network           (Socket, accept, listenOn, sClose)
+#ifdef mingw32_HOST_OS
+import           Network           (PortID (PortNumber))
+#else
+import           Network           (PortID (UnixSocket))
+#endif
+import           System.Directory  (removeFile)
+import           System.Exit       (ExitCode (ExitSuccess))
+import           System.IO         (Handle, hClose, hFlush, hGetLine, hPutStrLn)
+import           System.IO.Error   (ioeGetErrorType, isAlreadyInUseError,
+                                    isDoesNotExistError)
 
-import CommandLoop (newCommandLoopState, Config, updateConfig, startCommandLoop)
-import Types (ClientDirective(..), Command, CommandExtra(..), ServerDirective(..))
-import Util (readMaybe)
+import           CommandLoop       (Config, newCommandLoopState,
+                                    startCommandLoop, updateConfig)
+import           Types             (ClientDirective (..), Command,
+                                    CommandExtra (..), ServerDirective (..))
+import           Util              (readMaybe)
 
 createListenSocket :: FilePath -> IO Socket
+#ifdef mingw32_HOST_OS
+createListenSocket socketPath = do
+    r <- tryJust (guard . isAlreadyInUseError) $ listenOn (PortNumber $ fromInteger $ read socketPath)
+    case r of
+        Right socket -> return socket
+        Left _ -> do
+            removeFile socketPath
+            listenOn (PortNumber $ fromInteger $ read socketPath)
+#else
 createListenSocket socketPath = do
     r <- tryJust (guard . isAlreadyInUseError) $ listenOn (UnixSocket socketPath)
     case r of
@@ -22,11 +41,12 @@ createListenSocket socketPath = do
         Left _ -> do
             removeFile socketPath
             listenOn (UnixSocket socketPath)
+#endif
 
 startServer :: FilePath -> Maybe Socket -> CommandExtra -> IO ()
 startServer socketPath mbSock cmdExtra = do
     case mbSock of
-        Nothing -> bracket (createListenSocket socketPath) cleanup go
+        Nothing   -> bracket (createListenSocket socketPath) cleanup go
         Just sock -> (go sock) `finally` (cleanup sock)
     where
     cleanup :: Socket -> IO ()
@@ -65,7 +85,7 @@ getNextCommand :: IORef (Maybe Handle) -> Socket -> IORef (Maybe Config) -> IO (
 getNextCommand currentClient sock config = do
     checkCurrent <- readIORef currentClient
     case checkCurrent of
-        Just h -> hClose h
+        Just h  -> hClose h
         Nothing -> return ()
     (h, _, _) <- accept sock
     writeIORef currentClient (Just h)
