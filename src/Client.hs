@@ -28,7 +28,7 @@ import           Util              (readMaybe)
 
 connect :: FilePath -> IO Handle
 #ifdef mingw32_HOST_OS
-connect sock = connectTo "" (PortNumber $ fromIntegral $ sock)
+connect sock = connectTo "" (PortNumber $ fromIntegral $ read sock)
 #else
 connect sock = connectTo "" (UnixSocket sock)
 #endif
